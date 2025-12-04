@@ -4,7 +4,13 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 
+# Import CORS
+from flask_cors import CORS
+
 app = Flask(__name__)
+
+# Aktifkan CORS untuk /predict
+CORS(app, resources={r"/predict": {"origins": "https://kel5.myiot.fun"}})
 
 # ======================================================
 #  LOAD MODEL
@@ -69,7 +75,6 @@ def buat_jadwal(frekuensi, mulai="08:00"):
         interval = 24.0 / max(1, frekuensi)
         return [(start + timedelta(hours=interval * i)).strftime("%H:%M") for i in range(frekuensi)]
     except:
-        # Fallback jika ada error
         default_times = ["08:00", "12:00", "16:00", "20:00"]
         return default_times[:max(1, min(frekuensi, 4))]
 
@@ -185,6 +190,5 @@ def predict():
 #  RUN untuk development lokal saja
 # ======================================================
 if __name__ == '__main__':
-    # HANYA untuk development lokal
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
