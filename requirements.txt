@@ -1,4 +1,6 @@
-flask==3.0.3
+python>=3.11,<3.12
+
+Flask==3.0.3
 scikit-learn==1.6.1
 numpy==1.26.4
 joblib==1.4.2
