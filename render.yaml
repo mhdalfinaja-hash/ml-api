@@ -1,9 +1,10 @@
 services:
   - type: web
     name: ml-api
-    runtime: python
+    env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python api_ml.py"
     envVars:
       - key: PORT
         value: 5000
+    runtime: python-3.10.13
