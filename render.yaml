@@ -2,9 +2,10 @@ services:
   - type: web
     name: ml-api
     env: python
-    pythonVersion: 3.10.13
+    plan: free
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python api_ml.py"
+    startCommand: "gunicorn api_ml:app"
+    pythonVersion: "3.10"
     envVars:
       - key: PORT
         value: 5000
