@@ -3,22 +3,19 @@ import joblib
 import numpy as np
 import os
 
-# ✅ Download model jika belum ada
-if not os.path.exists('model_pakan_rf_full.pkl'):
-    os.system('python download_model.py')
-
 app = Flask(__name__)
 
-# --- Load model & scaler ---
+# --- Load model & scaler saat startup (sekali saja) ---
 try:
-    model = joblib.load('model_pakan_rf_full.pkl')
-    scaler = joblib.load('scaler_pakan_rf_full.pkl')
+    model = joblib.load('model_pakan_rf.pkl')
+    scaler = joblib.load('scaler_pakan_rf.pkl')
     print("✅ Model & scaler berhasil dimuat.")
 except Exception as e:
     print("❌ Gagal muat model:", e)
-    raise SystemExit
+    model = None
+    scaler = None
 
-# --- Helper functions (dari script Anda) ---
+# --- Helper functions ---
 def kategori_suhu(s):
     if s < 24:
         return "DINGIN - Metabolisme turun; Nafsu menurun"
@@ -43,12 +40,15 @@ def buat_jadwal(frekuensi, mulai="08:00"):
 # --- Endpoint utama ---
 @app.route('/predict', methods=['POST'])
 def predict():
+    if model is None or scaler is None:
+        return jsonify({'status': 'error', 'message': 'Model tidak tersedia'}), 500
+
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No JSON data received'}), 400
+            return jsonify({'status': 'error', 'message': 'No JSON data received'}), 400
 
-        # Ambil data (sesuai kolom model Anda)
+        # Ambil & validasi data
         jumlah = float(data.get('jumlah_ikan', 100))
         umur = int(float(data.get('umur_minggu', 3)))
         pakan_per_bukaan = float(data.get('pakan_per_bukaan', 5))
@@ -62,13 +62,12 @@ def predict():
         X_scaled = scaler.transform(X)
         total_pakan = round(float(model.predict(X_scaled)[0]), 2)
 
-        # Hitung jadwal & frekuensi
+        # Hitung output
         frekuensi = tentukan_frekuensi(umur)
         jadwal = buat_jadwal(frekuensi)
         jadwal_str = ";".join(jadwal)
         bukaan = max(1, int(round(total_pakan / frekuensi / pakan_per_bukaan))) if frekuensi > 0 else 1
 
-        # Format respons
         return jsonify({
             'status': 'success',
             'data': {
@@ -83,6 +82,16 @@ def predict():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+# --- Health check ---
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'ok',
+        'model_loaded': model is not None,
+        'scaler_loaded': scaler is not None
+    })
+
 # --- Jalankan Flask ---
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)  # ✅ debug=False = sekali muat
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
