@@ -7,4 +7,4 @@ services:
     envVars:
       - key: PORT
         value: 5000
-    runtime: python-3.10.13
+    # HAPUS BARRIS 'runtime: python-3.10.13' - Render akan otomatis pilih dari requirements.txt
