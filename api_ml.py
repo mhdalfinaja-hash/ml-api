@@ -9,8 +9,31 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
-# Aktifkan CORS untuk /predict
-CORS(app, resources={r"/predict": {"origins": "https://kel5.myiot.fun"}})
+# ======================================================
+#  CORS CONFIGURATION - PERBAIKI INI!
+# ======================================================
+# OPSI 1: Allow semua origin (lebih mudah untuk debug)
+CORS(app)
+
+# OPSI 2: Jika ingin spesifik ke domain Anda + localhost untuk testing
+# CORS(app, resources={
+#     r"/*": {
+#         "origins": ["https://kel5.myiot.fun", "http://localhost:*"],
+#         "methods": ["GET", "POST", "OPTIONS"],
+#         "allow_headers": ["Content-Type", "Authorization"],
+#         "supports_credentials": True,
+#         "expose_headers": ["Content-Type"]
+#     }
+# })
+
+# OPSI 3: Decorator khusus untuk predict
+# @app.after_request
+# def add_cors_headers(response):
+#     response.headers['Access-Control-Allow-Origin'] = 'https://kel5.myiot.fun'
+#     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+#     response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+#     response.headers['Access-Control-Allow-Credentials'] = 'true'
+#     return response
 
 # ======================================================
 #  LOAD MODEL
@@ -78,27 +101,43 @@ def buat_jadwal(frekuensi, mulai="08:00"):
         default_times = ["08:00", "12:00", "16:00", "20:00"]
         return default_times[:max(1, min(frekuensi, 4))]
 
+# ======================================================
+#  HANDLE OPTIONS PREFLIGHT REQUESTS
+# ======================================================
+@app.route("/predict", methods=["OPTIONS"])
+def handle_options():
+    """Handle preflight OPTIONS request untuk CORS"""
+    response = jsonify({"status": "ok"})
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
+    response.headers.add("Access-Control-Max-Age", "86400")  # 24 jam cache
+    return response, 200
 
 # ======================================================
 #  API ROUTES
 # ======================================================
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({
+    response = jsonify({
         "status": "ok", 
         "message": "ML API aktif",
         "model_loaded": model is not None,
-        "python_version": os.environ.get("PYTHON_VERSION", "unknown")
+        "python_version": os.environ.get("PYTHON_VERSION", "unknown"),
+        "cors_enabled": True
     })
+    return response
 
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({
+    response = jsonify({
         "status": "healthy" if model is not None else "degraded",
         "model_loaded": model is not None,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "cors": "enabled"
     })
+    return response
 
 
 @app.route("/predict", methods=["POST"])
@@ -106,15 +145,19 @@ def predict():
     try:
         # Cek model sudah dimuat
         if model is None or scaler is None:
-            return jsonify({
+            response = jsonify({
                 "status": "error", 
                 "message": "Model belum dimuat. Silakan periksa server logs."
-            }), 503
+            })
+            response.status_code = 503
+            return response
         
         # Ambil data
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No JSON data received'}), 400
+            response = jsonify({'error': 'No JSON data received'})
+            response.status_code = 400
+            return response
 
         # Validasi dan parse input
         required_fields = ['jumlah_ikan', 'umur_minggu', 'pakan_per_bukaan', 
@@ -122,7 +165,9 @@ def predict():
         
         missing_fields = [f for f in required_fields if f not in data]
         if missing_fields:
-            return jsonify({'error': f'Missing fields: {missing_fields}'}), 400
+            response = jsonify({'error': f'Missing fields: {missing_fields}'})
+            response.status_code = 400
+            return response
         
         try:
             jumlah = float(data['jumlah_ikan'])
@@ -133,7 +178,9 @@ def predict():
             serat = float(data['serat_pct'])
             suhu = float(data['suhu_c'])
         except ValueError as e:
-            return jsonify({'error': f'Invalid numeric value: {str(e)}'}), 400
+            response = jsonify({'error': f'Invalid numeric value: {str(e)}'})
+            response.status_code = 400
+            return response
 
         # Validasi range input
         if jumlah <= 0:
@@ -158,7 +205,7 @@ def predict():
         else:
             bukaan = 1
 
-        return jsonify({
+        response = jsonify({
             "status": "success",
             "data": {
                 "rekomendasi_pakan": total_pakan,
@@ -177,13 +224,31 @@ def predict():
                 }
             }
         })
+        
+        return response
 
     except Exception as e:
-        print(f"❌ Error in predict: {str(e)}")  # Log error
-        return jsonify({
+        print(f"❌ Error in predict: {str(e)}")
+        response = jsonify({
             "status": "error", 
             "message": str(e)
-        }), 500
+        })
+        response.status_code = 500
+        return response
+
+
+# ======================================================
+#  CORS middleware untuk semua response
+# ======================================================
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('Access-Control-Max-Age', '86400')
+    return response
 
 
 # ======================================================
