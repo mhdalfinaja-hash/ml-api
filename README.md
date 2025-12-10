@@ -1,2 +1,2 @@
 # ml-api
-Flask API untuk prediksi ML Pakan Ikan
+Flask API untuk prediksi Mechine Learning Pakan Ikan
